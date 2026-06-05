@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Conteos PD — Agua Santa</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f0;min-height:100vh;display:flex;justify-content:center;padding:0}
+.app{width:100%;max-width:480px;display:flex;flex-direction:column;height:100vh}
+.header{background:#3B6D11;color:#EAF3DE;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.header h1{font-size:15px;font-weight:500;flex:1}
+.header small{font-size:11px;opacity:0.75}
+.dot{width:8px;height:8px;border-radius:50%;background:#97C459;flex-shrink:0}
+.msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#fff}
+.msg{max-width:88%;padding:10px 13px;border-radius:14px;line-height:1.55;font-size:14px}
+.bot{align-self:flex-start;background:#f0f0eb;color:#1a1a1a}
+.usr{align-self:flex-end;background:#3B6D11;color:#EAF3DE}
+
+/* Grid de botones grandes para selección */
+.btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;width:100%}
+.btn-grid.col1{grid-template-columns:1fr}
+.btn-grid.col3{grid-template-columns:1fr 1fr 1fr}
+.btn-opt{padding:12px 8px;border-radius:10px;border:1.5px solid #c8d8b0;background:#fff;cursor:pointer;font-size:13px;color:#2a4a10;font-weight:500;text-align:center;-webkit-tap-highlight-color:transparent;transition:background .1s}
+.btn-opt:active{background:#EAF3DE}
+.btn-opt.selected{background:#3B6D11;color:#EAF3DE;border-color:#3B6D11}
+.btn-opt.accent{background:#3B6D11;color:#EAF3DE;border-color:#3B6D11}
+.btn-opt.danger{border-color:#F09595;color:#A32D2D}
+
+/* Fila inferior */
+.inp-area{flex-shrink:0;background:#fff;border-top:1px solid #e5e5e0;padding:10px 12px}
+.inp-row{display:flex;gap:8px}
+.inp-row input{flex:1;height:42px;padding:0 14px;border:1.5px solid #ccc;border-radius:22px;font-size:15px;background:#f9f9f6;color:#1a1a1a;-webkit-appearance:none}
+.inp-row input:focus{outline:none;border-color:#3B6D11}
+.send-btn{width:42px;height:42px;border-radius:50%;border:none;background:#3B6D11;color:#EAF3DE;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.send-btn:active{background:#27500A}
+
+/* Contador de valores */
+.val-counter{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;font-size:12px;color:#666;margin-top:6px}
+.val-pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:80px;overflow-y:auto}
+.val-pill{background:#EAF3DE;color:#3B6D11;border-radius:12px;padding:3px 9px;font-size:12px;font-weight:500}
+
+/* Badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;margin-left:4px}
+.b-ok{background:#EAF3DE;color:#3B6D11}
+.b-err{background:#FCEBEB;color:#A32D2D}
+
+/* Resumen */
+.resumen{background:#fff;border:1.5px solid #c8d8b0;border-radius:10px;padding:10px 13px;margin-top:8px;font-size:12px;line-height:2}
+.resumen strong{font-weight:500;color:#555}
+
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="dot" id="statusdot"></div>
+    <div style="flex:1">
+      <div style="font-size:15px;font-weight:500">Conteos PD</div>
+      <div style="font-size:11px;opacity:0.75">Agua Santa — Google Sheets</div>
+    </div>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="inp-area" id="inp-area">
+    <div class="inp-row">
+      <input type="text" id="inp" placeholder="O escribe aquí..." inputmode="decimal" />
+      <button class="send-btn" onclick="send()">↑</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyTqnxJdWxCMWXcWxXxovRrND4hrvWbcYaHZP07vPa8LBUbDkvAsQluDppgsWQ_BI-uZQ/exec';
+
+const PRODUCTORES = ["Agrícola Agua Santa","Agrícola El Carmelo","Agrícola del Carmen","Agrícola Malihuito","Agrícola Villaseca","Campo Bonito","Agrícola Cervera","Agrícola Antares","El Condor de Apalta","Santa Ana de Huique","Agrícola Tricahue","Agrícola Santa Filomena","Frutícola Ramirana","Frutícola Tantehue"];
+const CONTEOS = ["Dardos","Ramillas","Racimos","Frutos","Yemas"];
+const MOMENTOS = ["pre poda","post poda","pre raleo","post raleo","pre cosecha","post cosecha","post caida de fruta","post regulacion de carga"];
+const ESPECIES = ["cereza","nectarín","ciruela","uva","durazno","arándano","kiwi"];
+const VARIEDADES = {
+  cereza:["Lapins","Santina","Regina","Kordia","Skeena","Frisco","Nimba","Sweet Aryana","Sweet Heart","Rainier","Sylvia","Bing","Stella","Pacific"],
+  nectarín:["Tifany","Boreal","Luciana","Garcica","Gardeta","Garofa","Gartairo","Clariss","Kinolea","Arctic Snow","Andes Nec 2","Andes Nec 4"],
+  ciruela:["Angeleno","Larry Ann","Autumn Pride","D'Agen","African Delight","Owen T","RR1","Black Ambar"],
+  uva:["Crimson Seedless","Red Globe","Superior","Thompson","Sweet Globe","Arra 29"],
+  durazno:["Elegant Lady","Rich Lady","O'Henry","Spring Lady","Ryan Sun"],
+  arándano:["Legacy","Camellia","SuzyBlue","Duke"],
+  kiwi:["Hayward"]
+};
+const TEMPORADAS = ["2023-24","2024-25","2025-26","2026-27"];
+
+let state = {step:0, data:{}, conteos:[]};
+
+function msgs(){ return document.getElementById('msgs'); }
+
+function addMsg(html, cls){
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.innerHTML = html;
+  msgs().appendChild(d);
+  msgs().scrollTop = msgs().scrollHeight;
+  return d;
+}
+
+function bot(html){ return addMsg(html, 'bot'); }
+function usr(text){ addMsg(text, 'usr'); }
+
+function botWithButtons(html, options, cols){
+  const d = bot(html);
+  if(!options || !options.length) return d;
+  const grid = document.createElement('div');
+  grid.className = 'btn-grid' + (cols===1?' col1':cols===3?' col3':'');
+  options.forEach(opt => {
+    if(!opt) return;
+    const b = document.createElement('button');
+    b.className = 'btn-opt' + (opt.accent?' accent':'') + (opt.danger?' danger':'');
+    b.textContent = typeof opt === 'string' ? opt : opt.label;
+    const val = typeof opt === 'string' ? opt : opt.value;
+    b.onclick = () => handleInput(val);
+    grid.appendChild(b);
+  });
+  d.appendChild(grid);
+  msgs().scrollTop = msgs().scrollHeight;
+  return d;
+}
+
+function send(){
+  const inp = document.getElementById('inp');
+  const v = inp.value.trim();
+  if(!v) return;
+  inp.value = '';
+  handleInput(v);
+}
+
+document.getElementById('inp').addEventListener('keydown', e => { if(e.key==='Enter') send(); });
+
+function showValCounter(){
+  const area = document.getElementById('inp-area');
+  let counter = document.getElementById('val-counter');
+  if(!counter){
+    counter = document.createElement('div');
+    counter.id = 'val-counter';
+    counter.className = 'val-counter';
+    area.appendChild(counter);
+  }
+  const pills = state.conteos.map(v=>`<span class="val-pill">${v}</span>`).join('');
+  const avg = state.conteos.length ? (state.conteos.reduce((a,b)=>a+b,0)/state.conteos.length).toFixed(1) : '—';
+  counter.innerHTML = `<span><b>${state.conteos.length}</b> valores &nbsp;·&nbsp; prom: <b>${avg}</b></span>
+    <button class="btn-opt accent" style="padding:6px 14px;font-size:12px;border-radius:20px" onclick="handleInput('fin')">Listo ✓</button>
+    <div class="val-pills" style="width:100%;margin-top:6px">${pills}</div>`;
+}
+
+function hideValCounter(){
+  const c = document.getElementById('val-counter');
+  if(c) c.remove();
+}
+
+async function enviarASheets(data){
+  const loadDiv = bot('<span class="spin">⟳</span> Enviando a Google Sheets...');
+  try {
+    const resp = await fetch(SHEETS_URL, {
+      method:'POST',
+      body: JSON.stringify(data),
+      headers:{'Content-Type':'text/plain'}
+    });
+    const json = await resp.json();
+    loadDiv.remove();
+    if(json.status==='ok'){
+      botWithButtons('✓ Guardado en Google Sheets <span class="badge b-ok">fila '+json.fila+'</span><br><small style="color:#666">Puedes verlo en tu hoja ahora mismo.</small>',
+        [{label:'+ Nuevo conteo', value:'nuevo conteo', accent:true}], 1);
+    } else {
+      botWithButtons('Error al guardar <span class="badge b-err">✗</span><br><small>'+(json.mensaje||'')+'</small>',
+        ['nuevo conteo'], 1);
+    }
+  } catch(err){
+    loadDiv.remove();
+    botWithButtons('Sin conexión <span class="badge b-err">✗</span><br><small>Verifica tu internet e intenta de nuevo.</small>',
+      [{label:'Reintentar', value:'confirmar'},{label:'Nuevo conteo', value:'nuevo conteo'}]);
+  }
+}
+
+function mostrarResumen(){
+  const s = state;
+  const avg = (s.conteos.reduce((a,b)=>a+b,0)/s.conteos.length).toFixed(1);
+  const d = bot(`¿Confirmar y enviar a Google Sheets?
+    <div class="resumen">
+      <strong>Productor:</strong> ${s.data.productor}<br>
+      <strong>Cuartel:</strong> ${s.data.cuartel}${s.data.sector?' / '+s.data.sector:''}<br>
+      <strong>Conteo:</strong> ${s.data.conteo} — ${s.data.momento}<br>
+      <strong>Temporada:</strong> ${s.data.temporada} &nbsp;|&nbsp; <strong>Fecha:</strong> ${s.data.fecha}<br>
+      <strong>Especie/Variedad:</strong> ${s.data.especie} / ${s.data.variedad}<br>
+      <strong>Valores (${s.conteos.length}):</strong> ${s.conteos.join(', ')}<br>
+      <strong>Prom:</strong> ${avg} &nbsp;|&nbsp; <strong>Mín:</strong> ${Math.min(...s.conteos)} &nbsp;|&nbsp; <strong>Máx:</strong> ${Math.max(...s.conteos)}
+    </div>`);
+  const grid = document.createElement('div');
+  grid.className = 'btn-grid';
+  [{label:'✓ Confirmar', value:'confirmar', accent:true},{label:'✎ Corregir valores', value:'corregir'},{label:'✕ Cancelar', value:'cancelar', danger:true}].forEach(o=>{
+    const b = document.createElement('button');
+    b.className = 'btn-opt'+(o.accent?' accent':o.danger?' danger':'');
+    b.textContent = o.label;
+    b.onclick = ()=>handleInput(o.value);
+    grid.appendChild(b);
+  });
+  d.appendChild(grid);
+  msgs().scrollTop = msgs().scrollHeight;
+}
+
+function handleInput(text){
+  usr(text);
+  const s = state;
+  const t = text.trim().toLowerCase();
+
+  if(t==='nuevo conteo'){
+    s.step=0; s.data={}; s.conteos=[]; hideValCounter();
+    botWithButtons('¿Cuál es el productor?', PRODUCTORES);
+    return;
+  }
+
+  switch(s.step){
+    case 0: {
+      const prod = PRODUCTORES.find(p=>p.toLowerCase()===t) ||
+                   PRODUCTORES.find(p=>p.toLowerCase().includes(t));
+      if(prod){ s.data.productor=prod; s.step=1; bot('Cuartel — escribe el número o nombre:'); }
+      else botWithButtons('No encontrado. Elige el productor:', PRODUCTORES);
+      break;
+    }
+    case 1:
+      s.data.cuartel=text; s.step=2;
+      botWithButtons('Sector:', ['-','N','S','kgb1','kgb2',{label:'+ otro (escribe)', value:'_sector_manual'}]);
+      break;
+    case 2:
+      s.data.sector=(text==='-'||text==='_sector_manual')?'':text; s.step=3;
+      if(text==='_sector_manual'){ bot('Escribe el nombre del sector:'); s.step=2.5; break; }
+      botWithButtons('Tipo de conteo:', CONTEOS, 2);
+      break;
+    case 2.5:
+      s.data.sector=text; s.step=3;
+      botWithButtons('Tipo de conteo:', CONTEOS, 2);
+      break;
+    case 3: {
+      const con = CONTEOS.find(c=>c.toLowerCase()===t);
+      if(con){ s.data.conteo=con; s.step=4; botWithButtons('Momento fenológico:', MOMENTOS, 2); }
+      else botWithButtons('Elige el tipo de conteo:', CONTEOS, 2);
+      break;
+    }
+    case 4: {
+      const mom = MOMENTOS.find(m=>m.toLowerCase()===t);
+      if(mom){ s.data.momento=mom; s.step=5; botWithButtons('Temporada:', TEMPORADAS, 2); }
+      else botWithButtons('Elige el momento:', MOMENTOS, 2);
+      break;
+    }
+    case 5: {
+      s.data.temporada=text; s.step=6;
+      const td=new Date(); const hoy=String(td.getDate()).padStart(2,'0')+'/'+String(td.getMonth()+1).padStart(2,'0')+'/'+td.getFullYear();
+      botWithButtons('Fecha del conteo:', [hoy, {label:'Otra fecha (escribe DD/MM/AAAA)', value:'_fecha_manual'}], 1);
+      break;
+    }
+    case 6: {
+      let fecha=text;
+      if(text==='_fecha_manual'){ bot('Escribe la fecha (DD/MM/AAAA):'); s.step=6.5; break; }
+      s.data.fecha=fecha; s.step=7;
+      botWithButtons('Especie:', ESPECIES, 2);
+      break;
+    }
+    case 6.5:
+      s.data.fecha=text; s.step=7;
+      botWithButtons('Especie:', ESPECIES, 2);
+      break;
+    case 7: {
+      const esp = ESPECIES.find(e=>e.toLowerCase()===t);
+      if(esp){ s.data.especie=esp; s.step=8; botWithButtons('Variedad:', VARIEDADES[esp]||[], 2); }
+      else botWithButtons('Elige la especie:', ESPECIES, 2);
+      break;
+    }
+    case 8: {
+      const varList = VARIEDADES[s.data.especie]||[];
+      const varMatch = varList.find(v=>v.toLowerCase()===t)||(varList.find(v=>v.toLowerCase().includes(t)))||text;
+      s.data.variedad=varMatch; s.step=9; s.conteos=[];
+      bot('Ingresa los valores uno por uno.<br>También puedes pegar varios separados por coma: <b>810, 609, 728</b>');
+      showValCounter();
+      break;
+    }
+    case 9:
+      if(t==='fin'||t==='listo ✓'||t==='listo'){
+        if(s.conteos.length===0){ bot('Ingresa al menos 1 valor.'); break; }
+        hideValCounter(); s.step=10; mostrarResumen();
+      } else if(t==='cancelar'){
+        s.step=0; s.data={}; s.conteos=[]; hideValCounter();
+        botWithButtons('Registro cancelado.',['nuevo conteo'],1);
+      } else if(text.includes(',')||text.includes(' ')){
+        const nums=text.split(/[,\s]+/).map(x=>parseFloat(x.replace(',','.'))).filter(x=>!isNaN(x));
+        if(nums.length){ s.conteos.push(...nums); showValCounter(); }
+        else bot('No se reconocieron números. Intenta de nuevo:');
+      } else {
+        const n=parseFloat(text.replace(',','.'));
+        if(isNaN(n)) bot('Ingresa un número válido:');
+        else { s.conteos.push(n); showValCounter(); }
+      }
+      break;
+    case 10:
+      if(t==='confirmar'||t==='✓ confirmar'){
+        const entry=Object.assign({},s.data,{valores:[...s.conteos]});
+        s.step=0; s.data={}; s.conteos=[];
+        enviarASheets(entry);
+      } else if(t==='corregir'||t==='✎ corregir valores'){
+        s.step=9; s.conteos=[];
+        bot('Ingresa los valores nuevamente:');
+        showValCounter();
+      } else if(t==='cancelar'||t==='✕ cancelar'){
+        s.step=0; s.data={}; s.conteos=[]; hideValCounter();
+        botWithButtons('Registro cancelado.',['nuevo conteo'],1);
+      } else {
+        mostrarResumen();
+      }
+      break;
+  }
+}
+
+botWithButtons('👋 Bienvenido a <b>Conteos PD</b><br><small style="color:#666">Agua Santa — conectado a Google Sheets</small>',
+  [{label:'+ Nuevo conteo', value:'nuevo conteo', accent:true}], 1);
+</script>
+</body>
+</html>
